@@ -1,4 +1,6 @@
+import datetime
 import pandas as pd
+import os
 import streamlit as st
 
 st.set_page_config(page_title='Streamlit App', layout='wide')
@@ -44,7 +46,29 @@ def add_crime_to_dataframe(sel, crime_id, crime, fine):
     # concat the new entry to the DataFrame in session state
     st.session_state.df = pd.concat([st.session_state.df, s])
 
-df = pd.read_csv(r'app/data/test.csv')
+def add_to_wanted_list(time, crime, total_fine):
+    new_entry = {
+        'selected': False,
+        'ID/Name': '',
+        '指名手配開始時刻':time.strftime('%Y/%m/%d %H:%M'),
+        '指名手配解除時刻': (time + datetime.timedelta(hours=st.session_state['指名手配時間'])).strftime('%Y/%m/%d %H:%M'),
+        '罪状': crime,
+        '罰金額': total_fine
+    }
+    s = pd.Series(new_entry).to_frame().T
+
+    # concat the new entry to the DataFrame in session state
+    st.session_state.df_wanted = pd.concat([st.session_state.df_wanted, s])
+
+# crime_fine_list_path = './data/test.csv'
+# wantedlist_file_path = './data/wanted_list.csv'
+# for streamlit cloud
+crime_fine_list_path = r'app/data/test.csv'
+wantedlist_file_path = r'app/data/wanted_list.csv'
+
+
+
+df = pd.read_csv(crime_fine_list_path)
 df['fine']=df['fine'].pipe(remove_missing_value)\
     .pipe(change_fine_dtype)
 
@@ -126,3 +150,62 @@ with a3:
             st.success('Data deleted.')
     with b3:
         st.markdown(f'<b>罰金総額 :</b> ${st.session_state.df.fine.sum()} ドル', unsafe_allow_html=True)
+
+        if st.button('指名手配に追加'):
+            #japan time (utc + 9 hours)
+            jst_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+
+            add_to_wanted_list(
+                jst_time,
+                st.session_state.df.crime.unique().tolist(),
+                st.session_state.df.fine.sum()
+                )
+
+        st.session_state['指名手配時間'] = 72
+        if st.toggle('指名手配時間の変更'):
+            duration = st.number_input('指名手配時間(時間)',value=72)
+            if duration != st.session_state['指名手配時間']:
+                st.session_state['指名手配時間'] = duration
+            else:
+                pass
+
+
+    st.divider()
+    st.header('指名手配者')
+
+    if 'df_wanted' not in st.session_state:
+        if os.path.isfile(wantedlist_file_path):
+            st.session_state.df_wanted = pd.read_csv(wantedlist_file_path, encoding='shift_jis')
+        else:
+            cols = ['selected','ID/Name', '指名手配開始時刻','指名手配解除時刻','罪状', '罰金額']
+            st.session_state.df_wanted = pd.DataFrame(columns = cols)
+
+    bs = st.columns(4)
+    with bs[0]:
+        if st.button('Delete selected',key='指名手配リスト_del'):
+            st.session_state.df_wanted = st.session_state.df_wanted[st.session_state.df_wanted['selected'] == False]
+            st.success('Data deleted.')
+    with bs[1]:
+        if st.button('Delete all',key='指名手配リスト_del_all'):
+            cols = st.session_state.df_wanted.columns
+            st.session_state.df_wanted = pd.DataFrame(columns = cols)
+            st.success('Data deleted.')
+    with bs[2]:
+        if st.button('手配リスト更新',key='指名手配リスト_update'):
+            if os.path.isfile(wantedlist_file_path):
+                st.session_state.df_wanted = pd.read_csv(wantedlist_file_path, encoding='shift_jis')
+            else:
+                cols = ['selected','ID/Name', '指名手配開始時刻','指名手配解除時刻','罪状', '罰金額']
+                st.session_state.df_wanted = pd.DataFrame(columns = cols)
+
+
+    with bs[3]:
+        if st.button('変更を保存'):
+            st.session_state.df_wanted.to_csv('./data/wanted_list.csv',index=False, encoding='shift_jis')
+            st.toast('リストが更新されました')
+
+    st.session_state.df_wanted = st.data_editor(st.session_state.df_wanted,
+                                                column_config = {'selected': st.column_config.CheckboxColumn('selected', default = False)},
+                                                hide_index = True, use_container_width=True)
+
+
