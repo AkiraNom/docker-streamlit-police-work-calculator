@@ -201,7 +201,7 @@ with a3:
 
     with bs[3]:
         if st.button('変更を保存'):
-            st.session_state.df_wanted.to_csv('./data/wanted_list.csv',index=False, encoding='shift_jis')
+            st.session_state.df_wanted.to_csv(wantedlist_file_path,index=False, encoding='shift_jis')
             st.toast('リストが更新されました')
 
     st.session_state.df_wanted = st.data_editor(st.session_state.df_wanted,
