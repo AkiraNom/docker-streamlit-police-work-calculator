@@ -2,8 +2,31 @@ import datetime
 import pandas as pd
 import os
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
 st.set_page_config(page_title='Streamlit App', layout='wide')
+
+# Create a connection object.
+try:
+    conn = st.connection("gsheets", type=GSheetsConnection)
+except:
+    st.warning('Failed to connect to the spreadsheet')
+
+def retrieve_worksheet_data(worksheet, col_range, reference_col):
+    # get data from the spreadsheet
+    df = conn.read(worksheet=worksheet,
+                   ttl='10m',
+                   index_col=False,
+                   usecols = list(range(col_range))
+                   )
+
+    df = remove_nan_rows(df, reference_col)
+    return df
+
+def remove_nan_rows(df, reference_col):
+    # remove rows containing nan in a reference col
+    df = df.dropna(subset=[reference_col])
+    return df
 
 def remove_missing_value(df):
     return df.fillna(0)
@@ -60,15 +83,17 @@ def add_to_wanted_list(time, crime, total_fine):
     # concat the new entry to the DataFrame in session state
     st.session_state.df_wanted = pd.concat([st.session_state.df_wanted, s])
 
-# crime_fine_list_path = './data/test.csv'
-# wantedlist_file_path = './data/wanted_list.csv'
-# for streamlit cloud
-crime_fine_list_path = r'app/data/test.csv'
-wantedlist_file_path = r'app/data/wanted_list.csv'
+# worksheet name
+df_worksheet = 'Crime_Fine_list'
+df_wanted_worksheet = 'Wanted_list'
 
+df = retrieve_worksheet_data(df_worksheet, 3, 'crime_id')
 
+df_wanted = retrieve_worksheet_data(df_wanted_worksheet,5,'ID/Name')
 
-df = pd.read_csv(crime_fine_list_path)
+# st.dataframe(df)
+# st.dataframe(df_wanted)
+
 df['fine']=df['fine'].pipe(remove_missing_value)\
     .pipe(change_fine_dtype)
 
@@ -174,12 +199,7 @@ with a3:
     st.header('指名手配者')
 
     if 'df_wanted' not in st.session_state:
-        if os.path.isfile(wantedlist_file_path):
-            st.session_state.df_wanted = pd.read_csv(wantedlist_file_path, encoding='shift_jis')
-        else:
-            cols = ['selected','ID/Name', '指名手配開始時刻','指名手配解除時刻','罪状', '罰金額']
-            st.session_state.df_wanted = pd.DataFrame(columns = cols)
-
+            st.session_state.df_wanted = df_wanted
     bs = st.columns(4)
     with bs[0]:
         if st.button('Delete selected',key='指名手配リスト_del'):
@@ -192,20 +212,21 @@ with a3:
             st.success('Data deleted.')
     with bs[2]:
         if st.button('手配リスト更新',key='指名手配リスト_update'):
-            if os.path.isfile(wantedlist_file_path):
-                st.session_state.df_wanted = pd.read_csv(wantedlist_file_path, encoding='shift_jis')
-            else:
-                cols = ['selected','ID/Name', '指名手配開始時刻','指名手配解除時刻','罪状', '罰金額']
-                st.session_state.df_wanted = pd.DataFrame(columns = cols)
+            st.write('pressed')
+                # st.session_state.df_wanted = pd.DataFrame(columns = cols)
 
 
     with bs[3]:
         if st.button('変更を保存'):
-            st.session_state.df_wanted.to_csv(wantedlist_file_path,index=False, encoding='shift_jis')
+            # st.session_state.df_wanted.to_csv(wantedlist_file_path,index=False, encoding='shift_jis')
+            df_wanted = conn.update(
+            worksheet=df_wanted_worksheet,
+            data=df_wanted,
+        )
+            st.cache_data.clear()
             st.toast('リストが更新されました')
 
     st.session_state.df_wanted = st.data_editor(st.session_state.df_wanted,
                                                 column_config = {'selected': st.column_config.CheckboxColumn('selected', default = False)},
                                                 hide_index = True, use_container_width=True)
-
 
