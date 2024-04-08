@@ -31,6 +31,11 @@ def remove_nan_rows(df, reference_col):
 def remove_missing_value(df):
     return df.fillna(0)
 
+def insert_col(df: pd.DataFrame , col_name: str, position: int, val):
+    if col_name not in df.columns:
+        df.insert(position, col_name, val)
+    return df
+
 def change_fine_dtype(df):
     list_fine = []
     for item in df:
@@ -65,6 +70,7 @@ def add_crime_to_dataframe(sel, crime_id, crime, fine):
         'fine': fine,
     }
     s = pd.Series(new_entry).to_frame().T
+    s['selected'] = s['selected'].astype(bool)
 
     # concat the new entry to the DataFrame in session state
     st.session_state.df = pd.concat([st.session_state.df, s])
@@ -79,20 +85,28 @@ def add_to_wanted_list(time, crime, total_fine):
         '罰金額': total_fine
     }
     s = pd.Series(new_entry).to_frame().T
+    s['selected'] = s['selected'].astype(bool)
 
     # concat the new entry to the DataFrame in session state
     st.session_state.df_wanted = pd.concat([st.session_state.df_wanted, s])
 
+def update_gspreadsheet(data, worksheet_name):
+
+    df = conn.update(
+        worksheet=worksheet_name,
+        data=data
+    )
+    st.cache_data.clear()
+
+    return df
 # worksheet name
-df_worksheet = 'Crime_Fine_list'
-df_wanted_worksheet = 'Wanted_list'
+worksheet_name_crime = 'Crime_Fine_list'
+worksheet_name_wanted = 'Wanted_list'
 
-df = retrieve_worksheet_data(df_worksheet, 3, 'crime_id')
+df = retrieve_worksheet_data(worksheet_name_crime, 3, 'crime_id')
 
-df_wanted = retrieve_worksheet_data(df_wanted_worksheet,5,'ID/Name')
-
-# st.dataframe(df)
-# st.dataframe(df_wanted)
+df_wanted = retrieve_worksheet_data(worksheet_name_wanted,5,'ID/Name')
+df_wanted = insert_col(df_wanted, 'selected', 0, False)
 
 df['fine']=df['fine'].pipe(remove_missing_value)\
     .pipe(change_fine_dtype)
@@ -102,7 +116,7 @@ df['selected'] = [False for i in range(df.shape[0])]
 
 list_crime = df['crime'].sort_values().unique().tolist()
 
-# le title
+# title
 st.header('ストグラ警察業務 罰金計算機')
 st.divider()
 
@@ -152,7 +166,6 @@ with a1:
 
 with a3:
     st.subheader('現在追加されている罪状リスト')
-    # not sure why session state is declared again here lol
     if 'df' not in st.session_state:
         st.session_state.df = df.copy()
 
@@ -199,34 +212,57 @@ with a3:
     st.header('指名手配者')
 
     if 'df_wanted' not in st.session_state:
-            st.session_state.df_wanted = df_wanted
+        st.session_state.df_wanted = df_wanted
+
+    st.session_state.df_wanted = st.data_editor(st.session_state.df_wanted,
+                                                column_config = {
+                                                    'selected': st.column_config.CheckboxColumn('selected', default = False)},
+                                                hide_index = True,
+                                                use_container_width=True)
+
     bs = st.columns(4)
     with bs[0]:
         if st.button('Delete selected',key='指名手配リスト_del'):
             st.session_state.df_wanted = st.session_state.df_wanted[st.session_state.df_wanted['selected'] == False]
             st.success('Data deleted.')
     with bs[1]:
+        # tested ok
         if st.button('Delete all',key='指名手配リスト_del_all'):
             cols = st.session_state.df_wanted.columns
-            st.session_state.df_wanted = pd.DataFrame(columns = cols)
+            _df = pd.DataFrame(columns = cols)
+            conn.clear(worksheet=worksheet_name_wanted)
+            df_wanted = update_gspreadsheet(_df, worksheet_name_wanted)
+            # df_wanted = conn.update(
+            #     worksheet=worksheet_name_wanted,
+            #     data=_df
+            # )
+            # st.cache_data.clear()
+            df_wanted = insert_col(df_wanted, 'selected', 0, False)
+            st.session_state.df_wanted = df_wanted
             st.success('Data deleted.')
+            st.rerun()
     with bs[2]:
         if st.button('手配リスト更新',key='指名手配リスト_update'):
-            st.write('pressed')
-                # st.session_state.df_wanted = pd.DataFrame(columns = cols)
-
+            st.rerun()
 
     with bs[3]:
         if st.button('変更を保存'):
-            # st.session_state.df_wanted.to_csv(wantedlist_file_path,index=False, encoding='shift_jis')
+            df_data = pd.DataFrame(st.session_state.df_wanted.iloc[:,1:])
+            st.dataframe(df_data)
+
             df_wanted = conn.update(
-            worksheet=df_wanted_worksheet,
-            data=df_wanted,
+            worksheet=worksheet_name_wanted,
+            data=df_data
         )
             st.cache_data.clear()
             st.toast('リストが更新されました')
+            st.rerun()
 
-    st.session_state.df_wanted = st.data_editor(st.session_state.df_wanted,
-                                                column_config = {'selected': st.column_config.CheckboxColumn('selected', default = False)},
-                                                hide_index = True, use_container_width=True)
+# ID/Name
+# 指名手配開始時刻
+# 指名手配解除時刻
+# 罪状
+# 罰金額
+
+# if st.button('Delete all',key='指名手配リスト_del_all_test'):
 
