@@ -220,7 +220,7 @@ with a3:
                                                 hide_index = True,
                                                 use_container_width=True)
 
-    bs = st.columns(4)
+    bs = st.columns(3)
     with bs[0]:
         if st.button('Delete selected',key='指名手配リスト_del'):
             st.session_state.df_wanted = st.session_state.df_wanted[st.session_state.df_wanted['selected'] == False]
@@ -228,24 +228,18 @@ with a3:
     with bs[1]:
         # tested ok
         if st.button('Delete all',key='指名手配リスト_del_all'):
-            cols = st.session_state.df_wanted.columns
+            # remove 'selected' col
+            cols = st.session_state.df_wanted.columns[1:]
             _df = pd.DataFrame(columns = cols)
             conn.clear(worksheet=worksheet_name_wanted)
             df_wanted = update_gspreadsheet(_df, worksheet_name_wanted)
-            # df_wanted = conn.update(
-            #     worksheet=worksheet_name_wanted,
-            #     data=_df
-            # )
-            # st.cache_data.clear()
+
             df_wanted = insert_col(df_wanted, 'selected', 0, False)
             st.session_state.df_wanted = df_wanted
             st.success('Data deleted.')
             st.rerun()
-    with bs[2]:
-        if st.button('手配リスト更新',key='指名手配リスト_update'):
-            st.rerun()
 
-    with bs[3]:
+    with bs[2]:
         if st.button('変更を保存'):
             df_data = pd.DataFrame(st.session_state.df_wanted.iloc[:,1:])
             st.dataframe(df_data)
