@@ -220,7 +220,8 @@ with a3:
                                                 hide_index = True,
                                                 use_container_width=True)
 
-    bs = st.columns(3)
+    st.info('指名手配者リストの追加/変更は下記のいずれかのボタンが押されるまでスプレッドに反映されません')
+    bs = st.columns(4)
     with bs[0]:
         if st.button('Delete selected',key='指名手配リスト_del'):
             st.session_state.df_wanted = st.session_state.df_wanted[st.session_state.df_wanted['selected'] == False]
@@ -238,19 +239,40 @@ with a3:
             st.session_state.df_wanted = df_wanted
             st.success('Data deleted.')
             st.rerun()
-
     with bs[2]:
+        st.session_state.warning = False
+        if st.button('手配リスト更新',key='指名手配リスト_update'):
+            st.session_state.warning = True
+
+
+
+    with bs[3]:
         if st.button('変更を保存'):
+            st.write('session_state_wanted')
+            st.dataframe(st.session_state.df_wanted)
             df_data = pd.DataFrame(st.session_state.df_wanted.iloc[:,1:])
+            st.write('df_data after dropping selected col')
             st.dataframe(df_data)
 
-            df_wanted = conn.update(
-            worksheet=worksheet_name_wanted,
-            data=df_data
-        )
-            st.cache_data.clear()
-            st.toast('リストが更新されました')
-            st.rerun()
+        #     df_wanted = conn.update(
+        #     worksheet=worksheet_name_wanted,
+        #     data=df_data
+        # )
+        #     st.cache_data.clear()
+        #     st.toast('リストが更新されました')
+        #     st.rerun()
+    if st.session_state.warning:
+        st.warning('追加/変更を保存せず指名手配者リストの再読み込みを行います')
+
+        cols = st.columns(2)
+        with cols[0]:
+            confirmed = st.button('手配リストを更新する', key='confirmation')
+            if confirmed:
+                st.rerun()
+        with cols[1]:
+            reject = st.button('手配リストを更新しない',key='reject')
+            if reject:
+                st.session_state.warning = False
 
 # ID/Name
 # 指名手配開始時刻
