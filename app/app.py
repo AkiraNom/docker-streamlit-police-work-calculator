@@ -3,6 +3,7 @@ import pandas as pd
 import os
 import streamlit as st
 from streamlit_gsheets import GSheetsConnection
+import time
 
 st.set_page_config(page_title='Streamlit App', layout='wide')
 
@@ -81,7 +82,7 @@ def add_to_wanted_list(time, crime, total_fine):
         'ID/Name': '',
         '指名手配開始時刻':time.strftime('%Y/%m/%d %H:%M'),
         '指名手配解除時刻': (time + datetime.timedelta(hours=st.session_state['指名手配時間'])).strftime('%Y/%m/%d %H:%M'),
-        '罪状': str(crime).replace('[',''),
+        '罪状': clear_character(str(crime)),
         '罰金額': total_fine
     }
     s = pd.Series(new_entry).to_frame().T
@@ -101,6 +102,12 @@ def update_gspreadsheet(data, worksheet_name):
     df = insert_col(df, 'selected', 0, False)
 
     return df
+
+def clear_character(text: str):
+    chars = "[]'"
+    for c in chars:
+        text = text.replace(c, '')
+    return text
 
 # worksheet name
 worksheet_name_crime = 'Crime_Fine_list'
@@ -146,6 +153,7 @@ with a1:
 
     # preparing a button that records/appends the user input to the list/dataframe
     if st.button('リストに追加'):
+        #  check dupliation
         if crime not in st.session_state.df_new_registry['罪状'].tolist():
 
             # concat the new entry to the DataFrame in session state
@@ -195,12 +203,10 @@ with a3:
         if st.button('指名手配に追加'):
             #japan time (utc + 9 hours)
             jst_time = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+            # st.write(st.session_state.df_new_registry['罪状'].unique().tolist())
+            crimes = clear_character(str(st.session_state.df_new_registry['罪状'].unique().tolist()))
 
-            add_to_wanted_list(
-                jst_time,
-                st.session_state.df_new_registry['罪状'].unique().tolist(),
-                st.session_state.df_new_registry['罰金額']
-                )
+            add_to_wanted_list(jst_time,crimes,sum_fine)
 
         st.session_state['指名手配時間'] = 72
         if st.toggle('指名手配時間の変更'):
@@ -224,13 +230,16 @@ with a3:
         if st.button('Delete selected',key='指名手配リスト_del'):
             st.session_state.df_wanted = st.session_state.df_wanted[st.session_state.df_wanted['selected'] == False]
             st.success('Data deleted.')
+            time.sleep(1)
+            st.rerun()
     with bs[1]:
-        # tested ok
         if st.button('Delete all',key='指名手配リスト_del_all'):
             cols = st.session_state.df_wanted.columns
             # clear all data in worksheet (overwrite the dataframe with empty data)
             st.session_state.df_wanted = pd.DataFrame(columns = cols)
             st.success('Data deleted.')
+            time.sleep(1)
+            st.rerun()
 
     st.info('指名手配者リストの追加/変更は下記のいずれかのボタンが押されるまでスプレッドに反映されません')
     cs = st.columns(4)
@@ -245,25 +254,30 @@ with a3:
             data = st.session_state.df_wanted.drop('selected', axis=1)
             df_wanted = update_gspreadsheet(data, worksheet_name_wanted)
             st.session_state.df_wanted = df_wanted
+            st.cache_data.clear()
             st.toast('リストが更新されました')
+            time.sleep(1)
+            st.rerun()
 
     if st.session_state.warning:
         st.warning('追加/変更を保存せず指名手配者リストの再読み込みを行います')
 
         cols = st.columns(2)
         with cols[0]:
-            if st.button('手配リストを更新する', key='confirmation'):
+            if st.button('手配リストの再読み込みをする', key='confirmation'):
                 if (st.session_state.warning):
                     del st.session_state.df_wanted
                     _df = retrieve_worksheet_data(worksheet_name_wanted,5,'ID/Name')
                     _df = insert_col(df_wanted, 'selected', 0, False)
                     st.session_state.df_wanted = _df
+                    st.cache_data.clear()
 
                     st.session_state.warning = False
 
                     st.rerun()
 
         with cols[1]:
-            reject = st.button('手配リストを更新しない',key='reject')
+            reject = st.button('手配リストの再読み込みをしない',key='reject')
             if reject:
                 st.session_state.warning = False
+
