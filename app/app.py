@@ -43,7 +43,6 @@ def change_fine_dtype(df):
         if isinstance(item, int):
             list_fine.append(item)
         elif ',' in item:
-            # print(f'{item}, {item.replace(",", "")}')
             list_fine.append(int(item.replace(',','')))
         elif '-' in item:
             list_fine.append(int(item.replace('-','0')))
@@ -56,11 +55,17 @@ def change_fine_dtype(df):
 
 def get_crime_data(df, crime):
     # setting up variables to fill in other columns for each entry (row)
+
     sel = False
-    crime_id = df['crime_id'][df['crime'] == crime].values[0]
+
+    try:
+        crime_id = df['crime_id'][df['crime'] == crime].values[0]
+    except IndexError:
+        st.warning('罪状はコンマ(,)、半角スペース( )、もしくは点(、)で区切ってください')
+        st.stop()
+
     crime = df['crime'][df['crime'] == crime].values[0]
     fine = df['fine'][df['crime'] == crime].values[0]
-
     return sel, crime_id, crime, fine
 
 def add_crime_to_dataframe(sel, crime_id, crime, fine):
@@ -109,16 +114,53 @@ def clear_character(text: str):
         text = text.replace(c, '')
     return text
 
+def create_preset_key_vals(df: pd.DataFrame):
+    # make a preset key and val pair from spreadsheet
+    dict = {}
+
+    rows = df.shape[0]
+    for row in range(rows):
+        idx = df['プリセット名'][row]
+        vals = df['罪状リスト'].values[row]
+        if ',' in vals:
+            vals = [val.split() for val in vals.split(',')]
+            # flatten list of lists
+            vals = [x for val in vals for x in val]
+        elif '、' in vals:
+            vals = [val.split() for val in vals.split('、')]
+            vals = [x for val in vals for x in val]
+        else:
+            vals = vals.split()
+
+
+        dict[idx] = vals
+
+    return dict
+
+def create_preset_button(df: pd.DataFrame):
+    # create a preset button from a preset key and val pair
+
+    dict = create_preset_key_vals(df)
+
+    for key, val in dict.items():
+        if st.button(key, key=key):
+            preset_items = val
+            for item in preset_items:
+                if item not in st.session_state.df_new_registry['罪状'].tolist():
+                    sel, crime_id, crime, fine = get_crime_data(st.session_state.df_crime, str(item))
+                    add_crime_to_dataframe(sel, crime_id, crime, fine)
+                else:
+                    pass
+
 # worksheet name
-worksheet_name_crime = 'Crime_Fine_list'
-worksheet_name_wanted = 'Wanted_list'
+worksheet_name_crime = '罪状及び罰金一覧'
+worksheet_name_wanted = '指名手配者リスト'
 
 if 'df_crime' not in st.session_state:
     df_crime = retrieve_worksheet_data(worksheet_name_crime, 3, 'crime_id')
     df_crime['fine']=df_crime['fine'].pipe(remove_missing_value)\
         .pipe(change_fine_dtype)
     st.session_state.df_crime = df_crime
-
 
 df_wanted = retrieve_worksheet_data(worksheet_name_wanted,5,'ID/Name')
 df_wanted = insert_col(df_wanted, 'selected', 0, False)
@@ -162,20 +204,16 @@ with a1:
             # pops a small notification on below-right
             st.toast('リストに追加されました')
         else:
-            # 重複回避
+            # duplication warning
             st.warning('すでに登録されています')
 
     st.info('各大型もしくは大型犯罪でよく使われる罪状をまとめて登録することができます')
+    worksheet_name_preset = 'プリセット'
+    df_preset = retrieve_worksheet_data(worksheet_name_preset, 2, 'プリセット名')
     # toggle button
     if st.toggle('犯罪用プリセット'):
-        if st.button('客船'):
-            preset_items = ['豪華客船強盗','PL殺人及び未遂']
-            for item in preset_items:
-                if item not in st.session_state.df_new_registry['罪状'].tolist():
-                    sel, crime_id, crime, fine = get_crime_data(st.session_state.df_crime, item)
-                    add_crime_to_dataframe(sel, crime_id, crime, fine)
-                else:
-                    pass
+
+        create_preset_button(df_preset)
 
 with a3:
     st.subheader('現在追加されている罪状リスト')
