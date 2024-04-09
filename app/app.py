@@ -65,15 +65,15 @@ def get_crime_data(df, crime):
 def add_crime_to_dataframe(sel, crime_id, crime, fine):
     new_entry = {
         'selected': sel,
-        'crime_id': crime_id,
-        'crime': crime,
-        'fine': fine,
+        '罪状ID': crime_id,
+        '罪状': crime,
+        '罰金額': int(fine),
     }
     s = pd.Series(new_entry).to_frame().T
     s['selected'] = s['selected'].astype(bool)
 
     # concat the new entry to the DataFrame in session state
-    st.session_state.df = pd.concat([st.session_state.df, s])
+    st.session_state.df_new_registry = pd.concat([st.session_state.df_new_registry, s])
 
 def add_to_wanted_list(time, crime, total_fine):
     new_entry = {
@@ -81,7 +81,7 @@ def add_to_wanted_list(time, crime, total_fine):
         'ID/Name': '',
         '指名手配開始時刻':time.strftime('%Y/%m/%d %H:%M'),
         '指名手配解除時刻': (time + datetime.timedelta(hours=st.session_state['指名手配時間'])).strftime('%Y/%m/%d %H:%M'),
-        '罪状': crime,
+        '罪状': str(crime).replace('[',''),
         '罰金額': total_fine
     }
     s = pd.Series(new_entry).to_frame().T
@@ -98,34 +98,39 @@ def update_gspreadsheet(data, worksheet_name):
     )
     st.cache_data.clear()
 
+    df = insert_col(df, 'selected', 0, False)
+
     return df
+
 # worksheet name
 worksheet_name_crime = 'Crime_Fine_list'
 worksheet_name_wanted = 'Wanted_list'
 
-df = retrieve_worksheet_data(worksheet_name_crime, 3, 'crime_id')
+if 'df_crime' not in st.session_state:
+    df_crime = retrieve_worksheet_data(worksheet_name_crime, 3, 'crime_id')
+    df_crime['fine']=df_crime['fine'].pipe(remove_missing_value)\
+        .pipe(change_fine_dtype)
+    st.session_state.df_crime = df_crime
+
 
 df_wanted = retrieve_worksheet_data(worksheet_name_wanted,5,'ID/Name')
 df_wanted = insert_col(df_wanted, 'selected', 0, False)
 
-df['fine']=df['fine'].pipe(remove_missing_value)\
-    .pipe(change_fine_dtype)
+if 'df_wanted' not in st.session_state:
+    st.session_state.df_wanted = df_wanted
 
-# preparing check boxes for the dataframe
-df['selected'] = [False for i in range(df.shape[0])]
+cols_new_registry = ['selected', '罪状ID','罪状','罰金額']
+df_new_registry = pd.DataFrame(columns=cols_new_registry)
+df_new_registry['selected'] = df_new_registry['selected'].astype(bool)
 
-list_crime = df['crime'].sort_values().unique().tolist()
+if 'df_new_registry' not in st.session_state:
+    st.session_state.df_new_registry = df_new_registry
+
 
 # title
 st.header('ストグラ警察業務 罰金計算機')
 st.divider()
 
-# defining dataframe we want to dynamically interact with and make changes to within streamlit session.
-# declared once at the beginning, like this:
-if 'df' not in st.session_state:
-        st.session_state.df = pd.DataFrame(columns = df.columns)
-if 'full' not in st.session_state:
-        st.session_state.full = df.copy()
 # create page columns
 a1,a2,a3 = st.columns([.75,.25,2])
 
@@ -133,14 +138,15 @@ a1,a2,a3 = st.columns([.75,.25,2])
 with a1:
     st.subheader('罪状を追加')
 
-    # selecting sub-category before scrolling through product names
-    crime = st.selectbox('Select crime:', list_crime)
+    # selecting crime to add
+    crime_list = st.session_state.df_crime['crime'].sort_values().unique().tolist()
+    crime = st.selectbox('Select crime:', crime_list)
 
-    sel, crime_id, crime, fine = get_crime_data(df, crime)
+    sel, crime_id, crime, fine = get_crime_data(st.session_state.df_crime, crime)
 
     # preparing a button that records/appends the user input to the list/dataframe
     if st.button('リストに追加'):
-        if crime not in st.session_state.df['crime'].tolist():
+        if crime not in st.session_state.df_new_registry['罪状'].tolist():
 
             # concat the new entry to the DataFrame in session state
             add_crime_to_dataframe(sel, crime_id, crime, fine)
@@ -157,37 +163,34 @@ with a1:
         if st.button('客船'):
             preset_items = ['豪華客船強盗','PL殺人及び未遂']
             for item in preset_items:
-                if item not in st.session_state.df['crime'].tolist():
-                    sel, crime_id, crime, fine = get_crime_data(df, item)
+                if item not in st.session_state.df_new_registry['罪状'].tolist():
+                    sel, crime_id, crime, fine = get_crime_data(st.session_state.df_crime, item)
                     add_crime_to_dataframe(sel, crime_id, crime, fine)
                 else:
                     pass
 
-
 with a3:
     st.subheader('現在追加されている罪状リスト')
-    if 'df' not in st.session_state:
-        st.session_state.df = df.copy()
-
-
-    # to display the number of item in the list
-    st.write('Num. of entry:', st.session_state.df.shape[0])
-    st.session_state.df = st.data_editor(st.session_state.df.groupby(['selected','crime','crime_id']).agg({'fine':'sum'}).reset_index(),
-    column_config = {
-    'selected': st.column_config.CheckboxColumn('selected', default = False)
-    }, hide_index = True, use_container_width=True)
+    st.session_state.df_new_registry = st.data_editor(st.session_state.df_new_registry,
+                                                      column_config = {
+                                                          'selected': st.column_config.CheckboxColumn('selected', default = False)
+                                                          },
+                                                      hide_index = True,
+                                                      use_container_width=True
+                                                      )
     b1,b2,b3 = st.columns([1,1.5,1.5])
     with b1:
         if st.button('Delete selected'):
-            st.session_state.df = st.session_state.df[st.session_state.df['selected'] == False]
+            st.session_state.df_new_registry = st.session_state.df_new_registry[st.session_state.df_new_registry['selected'] == False]
             st.success('Data deleted.')
     with b2:
         if st.button('Delete all'):
-            cols = st.session_state.df.columns
-            st.session_state.df = pd.DataFrame(columns = cols)
+            cols = st.session_state.df_new_registry.columns
+            st.session_state.df_new_registry = pd.DataFrame(columns = cols)
             st.success('Data deleted.')
     with b3:
-        st.markdown(f'<b>罰金総額 :</b> ${st.session_state.df.fine.sum()} ドル', unsafe_allow_html=True)
+        sum_fine = st.session_state.df_new_registry['罰金額'].sum()
+        st.markdown(f'<b>罰金総額 :</b> ${sum_fine} ドル', unsafe_allow_html=True)
 
         if st.button('指名手配に追加'):
             #japan time (utc + 9 hours)
@@ -195,24 +198,20 @@ with a3:
 
             add_to_wanted_list(
                 jst_time,
-                st.session_state.df.crime.unique().tolist(),
-                st.session_state.df.fine.sum()
+                st.session_state.df_new_registry['罪状'].unique().tolist(),
+                st.session_state.df_new_registry['罰金額']
                 )
 
         st.session_state['指名手配時間'] = 72
         if st.toggle('指名手配時間の変更'):
-            duration = st.number_input('指名手配時間(時間)',value=72)
+            duration = st.number_input('指名手配時間 (時間)',value=72)
             if duration != st.session_state['指名手配時間']:
                 st.session_state['指名手配時間'] = duration
             else:
                 pass
 
-
     st.divider()
     st.header('指名手配者')
-
-    if 'df_wanted' not in st.session_state:
-        st.session_state.df_wanted = df_wanted
 
     st.session_state.df_wanted = st.data_editor(st.session_state.df_wanted,
                                                 column_config = {
@@ -220,7 +219,6 @@ with a3:
                                                 hide_index = True,
                                                 use_container_width=True)
 
-    st.info('指名手配者リストの追加/変更は下記のいずれかのボタンが押されるまでスプレッドに反映されません')
     bs = st.columns(4)
     with bs[0]:
         if st.button('Delete selected',key='指名手配リスト_del'):
@@ -229,56 +227,43 @@ with a3:
     with bs[1]:
         # tested ok
         if st.button('Delete all',key='指名手配リスト_del_all'):
-            # remove 'selected' col
-            cols = st.session_state.df_wanted.columns[1:]
-            _df = pd.DataFrame(columns = cols)
-            conn.clear(worksheet=worksheet_name_wanted)
-            df_wanted = update_gspreadsheet(_df, worksheet_name_wanted)
-
-            df_wanted = insert_col(df_wanted, 'selected', 0, False)
-            st.session_state.df_wanted = df_wanted
+            cols = st.session_state.df_wanted.columns
+            # clear all data in worksheet (overwrite the dataframe with empty data)
+            st.session_state.df_wanted = pd.DataFrame(columns = cols)
             st.success('Data deleted.')
-            st.rerun()
-    with bs[2]:
-        st.session_state.warning = False
+
+    st.info('指名手配者リストの追加/変更は下記のいずれかのボタンが押されるまでスプレッドに反映されません')
+    cs = st.columns(4)
+    with cs[0]:
+        if 'warning' not in st.session_state:
+            st.session_state.warning = False
         if st.button('手配リスト更新',key='指名手配リスト_update'):
             st.session_state.warning = True
 
-
-
-    with bs[3]:
+    with cs[1]:
         if st.button('変更を保存'):
-            st.write('session_state_wanted')
-            st.dataframe(st.session_state.df_wanted)
-            df_data = pd.DataFrame(st.session_state.df_wanted.iloc[:,1:])
-            st.write('df_data after dropping selected col')
-            st.dataframe(df_data)
+            data = st.session_state.df_wanted.drop('selected', axis=1)
+            df_wanted = update_gspreadsheet(data, worksheet_name_wanted)
+            st.session_state.df_wanted = df_wanted
+            st.toast('リストが更新されました')
 
-        #     df_wanted = conn.update(
-        #     worksheet=worksheet_name_wanted,
-        #     data=df_data
-        # )
-        #     st.cache_data.clear()
-        #     st.toast('リストが更新されました')
-        #     st.rerun()
     if st.session_state.warning:
         st.warning('追加/変更を保存せず指名手配者リストの再読み込みを行います')
 
         cols = st.columns(2)
         with cols[0]:
-            confirmed = st.button('手配リストを更新する', key='confirmation')
-            if confirmed:
-                st.rerun()
+            if st.button('手配リストを更新する', key='confirmation'):
+                if (st.session_state.warning):
+                    del st.session_state.df_wanted
+                    _df = retrieve_worksheet_data(worksheet_name_wanted,5,'ID/Name')
+                    _df = insert_col(df_wanted, 'selected', 0, False)
+                    st.session_state.df_wanted = _df
+
+                    st.session_state.warning = False
+
+                    st.rerun()
+
         with cols[1]:
             reject = st.button('手配リストを更新しない',key='reject')
             if reject:
                 st.session_state.warning = False
-
-# ID/Name
-# 指名手配開始時刻
-# 指名手配解除時刻
-# 罪状
-# 罰金額
-
-# if st.button('Delete all',key='指名手配リスト_del_all_test'):
-
