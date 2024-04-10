@@ -266,7 +266,7 @@ with a3:
                                                     'selected': st.column_config.CheckboxColumn('selected', default = False)},
                                                 hide_index = True,
                                                 use_container_width=True)
-
+    st.warning('ID/Nameが空白の場合、アプリ側でgooglesheetを読み込むときに無視されるため記入必須')
     bs = st.columns(4)
     with bs[0]:
         if st.button('Delete selected',key='指名手配リスト_del'):
