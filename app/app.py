@@ -16,7 +16,7 @@ except:
 def retrieve_worksheet_data(worksheet, col_range, reference_col):
     # get data from the spreadsheet
     df = conn.read(worksheet=worksheet,
-                   ttl='10m',
+                   ttl='1m',
                    index_col=False,
                    usecols = list(range(col_range))
                    )
