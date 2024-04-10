@@ -322,4 +322,5 @@ with a3:
             reject = st.button('手配リストの再読み込みをしない',key='reject')
             if reject:
                 st.session_state.warning = False
+                st.rerun()
 
