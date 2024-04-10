@@ -288,11 +288,11 @@ with a3:
     with cs[0]:
         if 'warning' not in st.session_state:
             st.session_state.warning = False
-        if st.button('手配リスト更新',key='指名手配リスト_update'):
+        if st.button('変更を保存せず更新'):
             st.session_state.warning = True
 
     with cs[1]:
-        if st.button('変更を保存'):
+        if st.button('変更を保存', key='指名手配リスト_update'):
             data = st.session_state.df_wanted.drop('selected', axis=1)
             df_wanted = update_gspreadsheet(data, worksheet_name_wanted)
             st.session_state.df_wanted = df_wanted
