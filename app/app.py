@@ -177,7 +177,7 @@ if 'df_new_registry' not in st.session_state:
 
 
 # title
-st.header('ストグラ警察業務 罰金計算機')
+st.header('ストグラ用 罰金計算-指名手配者リスト更新アプリ')
 st.divider()
 
 # create page columns
@@ -229,11 +229,15 @@ with a3:
         if st.button('Delete selected'):
             st.session_state.df_new_registry = st.session_state.df_new_registry[st.session_state.df_new_registry['selected'] == False]
             st.success('Data deleted.')
+            time.sleep(0.5)
+            st.rerun()
     with b2:
         if st.button('Delete all'):
             cols = st.session_state.df_new_registry.columns
             st.session_state.df_new_registry = pd.DataFrame(columns = cols)
             st.success('Data deleted.')
+            time.sleep(0.5)
+            st.rerun()
     with b3:
         sum_fine = st.session_state.df_new_registry['罰金額'].sum()
         st.markdown(f'<b>罰金総額 :</b> ${sum_fine} ドル', unsafe_allow_html=True)
@@ -268,7 +272,7 @@ with a3:
         if st.button('Delete selected',key='指名手配リスト_del'):
             st.session_state.df_wanted = st.session_state.df_wanted[st.session_state.df_wanted['selected'] == False]
             st.success('Data deleted.')
-            time.sleep(1)
+            time.sleep(0.5)
             st.rerun()
     with bs[1]:
         if st.button('Delete all',key='指名手配リスト_del_all'):
@@ -276,7 +280,7 @@ with a3:
             # clear all data in worksheet (overwrite the dataframe with empty data)
             st.session_state.df_wanted = pd.DataFrame(columns = cols)
             st.success('Data deleted.')
-            time.sleep(1)
+            time.sleep(0.5)
             st.rerun()
 
     st.info('指名手配者リストの追加/変更は下記のいずれかのボタンが押されるまでスプレッドに反映されません')
